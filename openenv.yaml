@@ -1,0 +1,135 @@
+name: MetaQuestOSEnv
+version: "1.0.0"
+description: >
+  An OpenEnv-compliant simulation of the system reliability layer of a
+  Meta Quest-class Mixed Reality device. AI agents act as Autonomous System
+  Reliability Engineers, handling real operational failure modes documented
+  in Meta's developer ecosystem: thermal throttling, SLAM sensor drift,
+  and kernel panic recovery. Resource observations are seeded with real
+  host system metrics via psutil.
+
+author: "MetaQuestOSEnv Team"
+license: MIT
+
+environment:
+  type: sequential
+  max_episodes: 1000
+  real_world: true
+  hardware_target: "Meta Quest-class MR Device (simulated)"
+
+tasks:
+  - id: thermal_mitigation
+    name: "Thermal Mitigation"
+    difficulty: easy
+    max_steps: 10
+    success_threshold: 1.0
+    description: >
+      GPU temperature has reached 85°C during a high-intensity MR session.
+      Agent must bring GPU temperature below 70°C without crashing the OS kernel.
+    reward_range: [0.0, 1.0]
+    partial_rewards: true
+
+  - id: sensor_recovery
+    name: "Sensor Fusion & SLAM Recovery"
+    difficulty: medium
+    max_steps: 12
+    success_threshold: 1.0
+    description: >
+      LiDAR sensor has entered Drift state in low-light conditions, causing
+      tracking_stability to fall to 0.31. Agent must reset sensors and switch
+      tracking mode to restore stability above 0.9.
+    reward_range: [0.0, 1.0]
+    partial_rewards: true
+
+  - id: kernel_panic_recovery
+    name: "Critical Kernel Panic Recovery"
+    difficulty: hard
+    max_steps: 15
+    success_threshold: 1.0
+    description: >
+      App ID 57 has caused a kernel panic with World Anchor memory corruption.
+      Agent must execute a multi-step Safe Mode recovery (stages 1→2→3),
+      clear memory locks, flush anchor cache, restore session data, and
+      restart the kernel without factory reset.
+    reward_range: [0.0, 1.0]
+    partial_rewards: true
+
+observation_space:
+  type: dict
+  fields:
+    - name: thermals.cpu_temp_c
+      type: float
+      description: "CPU temperature in Celsius (real host metric via psutil)"
+    - name: thermals.gpu_temp_c
+      type: float
+      description: "GPU temperature in Celsius"
+    - name: thermals.throttle_active
+      type: bool
+    - name: thermals.refresh_rate_hz
+      type: int
+      values: [72, 90, 120]
+    - name: sensors.imu_status
+      type: str
+      values: ["Active", "Drifting", "Failed", "Recalibrating"]
+    - name: sensors.lidar_status
+      type: str
+      values: ["Active", "Drifting", "Failed", "Recalibrating"]
+    - name: sensors.tracking_stability
+      type: float
+      range: [0.0, 1.0]
+    - name: sensors.tracking_mode
+      type: str
+      values: ["SLAM", "VIO", "IMU_ONLY", "Degraded"]
+    - name: resources.ram_used_mb
+      type: float
+      description: "Real host RAM usage in MB via psutil"
+    - name: resources.cpu_usage_pct
+      type: float
+      description: "Real host CPU usage percentage via psutil"
+    - name: spatial_anchors.anchor_stability
+      type: float
+      range: [0.0, 1.0]
+    - name: spatial_anchors.world_lock_active
+      type: bool
+    - name: kernel.status
+      type: str
+      values: ["Active", "Degraded", "Panic", "SafeMode", "Recovering"]
+
+action_space:
+  type: discrete_text
+  description: >
+    Text-based command strings. Each task exposes its own valid action set.
+    Actions follow the pattern: EXEC_<SUBSYSTEM>_<OPERATION> [--flag=value]
+    or QUERY_<SUBSYSTEM> for read-only diagnostics.
+
+api:
+  framework: fastapi
+  base_url: "http://localhost:7860"
+  endpoints:
+    - path: /reset
+      method: POST
+      description: "Initialize a task episode"
+    - path: /step
+      method: POST
+      description: "Execute one agent action"
+    - path: /state
+      method: GET
+      description: "Read current state (non-advancing)"
+    - path: /tasks
+      method: GET
+      description: "List all tasks"
+    - path: /health
+      method: GET
+      description: "Health check"
+
+infrastructure:
+  runtime: python3.11
+  memory_limit: "8GB"
+  cpu_limit: "2 vCPU"
+  database: sqlite3
+  persistence: session-scoped
+
+docker:
+  base_image: python:3.11-slim
+  port: 7860
+  entrypoint: "uvicorn main:app --host 0.0.0.0 --port 7860"
