@@ -136,7 +136,7 @@ class ActionResult(BaseModel):
 
 class ResetRequest(BaseModel):
     """Request to reset the environment to a task scenario."""
-    task_id: TaskID = Field(..., description="Which task scenario to initialize")
+    task_id: TaskID = Field(TaskID.THERMAL_MITIGATION, description="Which task scenario to initialize")
     seed: Optional[int] = Field(None, description="Random seed for reproducibility")
 
 

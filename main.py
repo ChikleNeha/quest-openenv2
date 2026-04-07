@@ -14,7 +14,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -83,12 +83,15 @@ async def health() -> HealthResponse:
 # ---------------------------------------------------------------------------
 
 @app.post("/reset", response_model=ResetResult)
-async def reset(request: ResetRequest) -> ResetResult:
+async def reset(request: ResetRequest = Body(default_factory=ResetRequest)) -> ResetResult:
     """
     Reset the environment to a fresh task scenario.
     Returns the initial observation, task description, and available actions.
+    Accepts empty body {} — defaults to thermal_mitigation task.
     """
     try:
+        if request is None:
+            request = ResetRequest()
         env = get_env()
         result = env.reset(task_id=request.task_id, seed=request.seed)
         logger.info(f"Reset: task={request.task_id.value} seed={request.seed}")
