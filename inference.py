@@ -268,22 +268,27 @@ def get_scripted_action(task_id: str, observation: Dict[str, Any], step: int) ->
     elif task_id == "kernel_panic_recovery":
         kernel  = observation.get("kernel", {})
         anchors = observation.get("spatial_anchors", {})
-        k_status       = kernel.get("status", "Panic")
-        mem_cleared    = kernel.get("memory_lock_cleared", False)
+        k_status        = kernel.get("status", "Panic")
+        mem_cleared     = kernel.get("memory_lock_cleared", False)
         anchors_cleared = anchors.get("cached_anchors_cleared", False)
         session_intact  = anchors.get("session_data_intact", False)
         world_lock      = anchors.get("world_lock_active", True)
-        safe_stage      = kernel.get("safe_mode_stage", 0)
+        safe_initiated  = kernel.get("safe_mode_initiated", False)
 
-        # Follow exact required order based on current state
         if k_status == "Panic":
             return "EXEC_SAFE_MODE_INIT --stage=1"
         if k_status == "SafeMode":
-            if safe_stage < 2:
-                return "EXEC_SAFE_MODE_INIT --stage=2"
-            if safe_stage < 3:
-                return "EXEC_SAFE_MODE_INIT --stage=3"
+            if not safe_initiated:
+                return "EXEC_SAFE_MODE_INIT --stage=1"
             if world_lock and not mem_cleared:
+                # Must do stages 2 and 3 first
+                last = observation.get("last_action", "")
+                if "stage=1" in (last or ""):
+                    return "EXEC_SAFE_MODE_INIT --stage=2"
+                if "stage=2" in (last or ""):
+                    return "EXEC_SAFE_MODE_INIT --stage=3"
+                return "EXEC_SAFE_MODE_INIT --stage=2"
+            if not mem_cleared:
                 return "EXEC_MEMORY_LOCK_CLEAR --target=world_anchor"
             if not anchors_cleared:
                 return "EXEC_ANCHOR_CACHE_FLUSH"
