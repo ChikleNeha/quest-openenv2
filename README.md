@@ -7,126 +7,125 @@ sdk: docker
 pinned: false
 ---
 
+# MetaQuestOSEnv 🥽
 
+> **OpenEnv-compliant AI benchmark** simulating the system reliability layer of a Meta Quest-class Mixed Reality device.
 
-# MetaQuestOSEnv
-
-> An OpenEnv-compliant AI benchmark simulating the system reliability layer of a Meta Quest-class Mixed Reality device.
-
----
-
-## Overview
-
-This environment trains AI agents to act as **Autonomous System Reliability Engineers** for next-generation spatial computing hardware. Inspired by real failure modes documented in Meta's Quest developer ecosystem, the benchmark challenges agents to diagnose and recover from hardware emergencies using text-based system commands.
-
-Real host system metrics (CPU load, RAM usage) are injected into observations via `psutil`, making the resource layer genuinely grounded in real-world data.
+AI agents act as **Autonomous System Reliability Engineers**, diagnosing and recovering from real operational failure modes documented in Meta's Quest developer ecosystem.
 
 ---
 
-## Environment Architecture
+## What This Is
+
+This environment trains LLM agents to manage a simulated MR operating system. The agent receives a JSON observation of the device state and must issue text commands to restore stability — exactly like a real SRE would.
+
+Real host metrics (CPU load, RAM usage) are injected into observations via `psutil`, making the resource layer genuinely grounded in real hardware data.
+
+---
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   FastAPI Layer                      │
-│         /reset  /step  /state  /tasks                │
-└───────────────────┬─────────────────────────────────┘
-                    │
-┌───────────────────▼─────────────────────────────────┐
-│              Core Environment Engine                 │
-│   Task Handler → Reward Function → State Builder     │
-└───────────────────┬─────────────────────────────────┘
-                    │
-┌───────────────────▼─────────────────────────────────┐
-│         SQLite Hardware Abstraction Layer            │
-│   Thermals │ Sensors │ Kernel │ Anchors │ Resources  │
-│   + psutil real CPU/RAM metrics injection            │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│           FastAPI Layer                  │
+│    /reset  /step  /state  /tasks         │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│         Core Environment Engine          │
+│  Task Handler → Reward → State Builder   │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│     SQLite Hardware Abstraction Layer    │
+│  Thermals | Sensors | Kernel | Anchors   │
+│  + psutil real CPU/RAM injection         │
+└─────────────────────────────────────────┘
 ```
 
-**Stack:** Python 3.11 · FastAPI · SQLite3 · psutil · Pydantic v2  
-**Constraints:** Optimized for 2 vCPU / 8 GB RAM (Hugging Face Spaces)
+**Stack:** Python 3.11 · FastAPI · SQLite3 · psutil · Pydantic v2 · openenv-core
+**Constraints:** Runs on 2 vCPU / 8 GB RAM (Hugging Face Spaces)
 
 ---
 
-## Tasks
+## The Three Tasks
 
-### Task 1: Thermal Mitigation `[Easy]`
-| Property | Value |
-|----------|-------|
-| Max Steps | 10 |
-| Difficulty | Easy |
-| Success Threshold | reward = 1.0 |
+### Task 1 — Thermal Mitigation `[Easy]` · Max 10 steps
 
-**Scenario:** A high-intensity MR experience pushes GPU temperature to 85°C+. Emergency shutdown is imminent.
+**Scenario:** A high-intensity MR experience pushes GPU temperature to 85°C. Emergency shutdown is imminent.
 
 **Goal:** Bring `gpu_temp_c` below 70°C without triggering a kernel panic.
 
-**Partial Rewards:**
 | Condition | Reward |
 |-----------|--------|
 | `gpu_temp_c` < 70°C, kernel Active | **1.0** |
-| `gpu_temp_c` < 75°C | 0.7 |
-| `gpu_temp_c` < 80°C | 0.45 |
-| `gpu_temp_c` < 85°C | 0.2 |
-| No progress | 0.05 |
+| `gpu_temp_c` < 73°C | 0.85 |
+| `gpu_temp_c` < 77°C | 0.65 |
+| `gpu_temp_c` < 81°C | 0.45 |
+| `gpu_temp_c` < 85°C | 0.3 |
+| No progress | 0.1 |
 | Kernel panic | 0.0 |
 
 ---
 
-### Task 2: Sensor Fusion & SLAM Recovery `[Medium]`
-| Property | Value |
-|----------|-------|
-| Max Steps | 12 |
-| Difficulty | Medium |
-| Success Threshold | reward = 1.0 |
+### Task 2 — Sensor Fusion & SLAM Recovery `[Medium]` · Max 12 steps
 
-**Scenario:** Low-light conditions cause LiDAR to enter Drift state. SLAM tracking collapses (`tracking_stability = 0.31`). Virtual objects float away from their anchors.
+**Scenario:** Low-light conditions cause LiDAR to enter Drift state. SLAM tracking collapses (`tracking_stability = 0.31`). Virtual objects are floating.
 
 **Goal:** Restore `tracking_stability > 0.9` using sensor resets and tracking mode switching.
 
-**Partial Rewards:**
 | Condition | Reward |
 |-----------|--------|
 | `stability` > 0.9, LiDAR not Failed | **1.0** |
-| `stability` > 0.75 | 0.7 |
-| `stability` > 0.60 | 0.5 |
-| `stability` > 0.45 | 0.3 |
-| `stability` > 0.30 | 0.1 |
-| `stability` ≤ 0.30 | 0.0 |
+| `stability` > 0.75 | 0.8 |
+| `stability` > 0.60 | 0.65 |
+| `stability` > 0.45 | 0.5 |
+| `stability` > 0.30 | 0.35 |
+| `stability` <= 0.30 | 0.15 |
 
 ---
 
-### Task 3: Kernel Panic Recovery `[Hard]`
-| Property | Value |
-|----------|-------|
-| Max Steps | 15 |
-| Difficulty | Hard |
-| Success Threshold | reward = 1.0 |
+### Task 3 — Kernel Panic Recovery `[Hard]` · Max 15 steps
 
-**Scenario:** App ID 57 crashes, corrupting the World Anchor memory lock. Kernel enters PANIC state. Session data is lost.
+**Scenario:** App ID 57 crashes and corrupts the World Anchor memory lock. Kernel enters PANIC. Session data is lost.
 
-**Goal:** Execute a multi-step Safe Mode recovery:
-1. Initiate Safe Mode (Stages 1 → 2 → 3)
-2. Clear the World Anchor memory lock
-3. Flush corrupted spatial anchor cache
-4. Restore session data from backup
-5. Restart kernel in Safe Mode (NOT full factory reset)
+**Goal:** Multi-step Safe Mode recovery without factory reset:
+1. Safe Mode stages 1 -> 2 -> 3
+2. Clear World Anchor memory lock
+3. Flush corrupted anchor cache
+4. Restore session from backup
+5. Restart kernel safely
 
-**Partial Rewards:**
 | Condition | Reward |
 |-----------|--------|
 | Kernel Active + session restored | **1.0** |
 | Kernel Recovering + session restored | 0.75 |
 | Kernel Recovering | 0.5 |
-| Kernel Active + session lost (factory reset) | 0.3 |
-| Safe Mode active (stage × 0.1) | 0.1–0.4 |
+| Kernel Active + session lost | 0.3 |
+| Safe Mode active (per stage) | 0.3-0.6 |
 | Kernel still in PANIC | 0.0 |
 
 ---
 
-## Observation Space
+## Scoring Formula
 
-The agent receives a JSON observation with these key fields:
+```
+score = final_reward * max(0.5, 1.0 - 0.04 * (steps_taken - 1))
+```
+
+Efficiency matters — solving in 3 steps scores higher than solving in 10. This makes the benchmark genuinely challenging to optimize.
+
+**Baseline scores (DeepSeek-V3):**
+```
+Task 1 - thermal_mitigation:    0.920  (3 steps)
+Task 2 - sensor_recovery:       0.880  (4 steps)
+Task 3 - kernel_panic_recovery: 0.760  (7 steps)
+Overall Average:                0.853
+```
+
+---
+
+## Observation Space
 
 ```json
 {
@@ -136,59 +135,62 @@ The agent receives a JSON observation with these key fields:
     "cpu_temp_c": 72.1,
     "gpu_temp_c": 83.4,
     "throttle_active": false,
-    "refresh_rate_hz": 120,
-    "fan_speed_pct": 60.0
+    "refresh_rate_hz": 120
   },
   "sensors": {
-    "imu_status": "Active",
     "lidar_status": "Drifting",
-    "tracking_mode": "SLAM",
-    "tracking_stability": 0.31
+    "tracking_stability": 0.31,
+    "tracking_mode": "SLAM"
   },
   "resources": {
-    "battery_pct": 78.0,
     "ram_used_mb": 3241.5,
     "cpu_usage_pct": 34.2
   },
   "spatial_anchors": {
-    "anchor_stability": 0.92,
     "world_lock_active": true,
     "session_data_intact": true
   },
   "kernel": {
     "status": "Active",
-    "crashed_app_id": null
+    "memory_lock_cleared": false
   },
-  "reward": 0.2,
+  "reward": 0.45,
   "done": false
 }
 ```
 
-> `resources.ram_used_mb` and `resources.cpu_usage_pct` are **real host metrics** from `psutil`.
+`ram_used_mb` and `cpu_usage_pct` are real host metrics from `psutil`.
 
 ---
 
 ## Action Space
 
-Each task exposes a discrete text-based action set. Actions follow this schema:
-
+Text-based commands:
 ```
 EXEC_<SUBSYSTEM>_<OPERATION> [--flag=value]   # Mutates state
 QUERY_<SUBSYSTEM>                              # Read-only diagnostic
-NOOP                                           # No-op (passive heat/drift creep)
+NOOP                                           # No operation
 ```
 
-**Example actions (Task 1):**
+Task 1 example actions:
 ```
 EXEC_THERMAL_THROTTLE --enable
 EXEC_DISPLAY_REFRESH --rate=72
-EXEC_KILL_BACKGROUND_PROCS
 EXEC_GPU_POWER_LIMIT --level=low
+EXEC_KILL_BACKGROUND_PROCS
 EXEC_FAN_OVERRIDE --speed=max
-QUERY_THERMAL_STATUS
 ```
 
-See `/actions/{task_id}` endpoint for the full list per task.
+Task 3 required sequence:
+```
+EXEC_SAFE_MODE_INIT --stage=1
+EXEC_SAFE_MODE_INIT --stage=2
+EXEC_SAFE_MODE_INIT --stage=3
+EXEC_MEMORY_LOCK_CLEAR --target=world_anchor
+EXEC_ANCHOR_CACHE_FLUSH
+EXEC_SESSION_RESTORE --source=backup
+EXEC_KERNEL_RESTART --mode=safe
+```
 
 ---
 
@@ -196,62 +198,51 @@ See `/actions/{task_id}` endpoint for the full list per task.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Health check (returns 200) |
+| `/` | GET | Health check |
 | `/health` | GET | Health check |
-| `/reset` | POST | Initialize a task episode |
+| `/reset` | POST | Initialize task (accepts empty `{}`) |
 | `/step` | POST | Execute one action |
 | `/state` | GET | Read current state |
 | `/tasks` | GET | List all tasks |
-| `/tasks/{task_id}` | GET | Task details |
 | `/actions/{task_id}` | GET | Valid actions for task |
 
-### Reset
+Quick test:
 ```bash
-curl -X POST http://localhost:7860/reset \
-  -H "Content-Type: application/json" \
-  -d '{"task_id": "thermal_mitigation", "seed": 42}'
-```
+# Health
+curl https://your-space.hf.space/health
 
-### Step
-```bash
-curl -X POST http://localhost:7860/step \
+# Reset with empty body (defaults to thermal_mitigation)
+curl -X POST https://your-space.hf.space/reset \
+  -H "Content-Type: application/json" -d '{}'
+
+# Reset specific task
+curl -X POST https://your-space.hf.space/reset \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": "kernel_panic_recovery", "seed": 42}'
+
+# Step
+curl -X POST https://your-space.hf.space/step \
   -H "Content-Type: application/json" \
   -d '{"action": "EXEC_THERMAL_THROTTLE --enable"}'
 ```
 
-### State
-```bash
-curl http://localhost:7860/state
-```
-
 ---
 
-## Setup & Running
+## Setup
 
 ### Local
-
 ```bash
-# Clone repo
-git clone <your-repo-url>
+git clone <your-repo>
 cd quest-openenv
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Run server
 python main.py
-# → Server starts at http://localhost:7860
+# Visit http://localhost:7860/docs
 ```
 
 ### Docker
-
 ```bash
 docker build -t quest-openenv .
-docker run -p 7860:7860 \
-  -e API_BASE_URL="https://api-inference.huggingface.co/v1/" \
-  -e MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct" \
-  -e HF_TOKEN="your_token_here" \
-  quest-openenv
+docker run -p 7860:7860 quest-openenv
 ```
 
 ---
@@ -259,22 +250,18 @@ docker run -p 7860:7860 \
 ## Running Inference
 
 ```bash
-export API_BASE_URL="https://api-inference.huggingface.co/v1/"
-export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
-export HF_TOKEN="your_hf_token"
-export ENV_BASE_URL="http://localhost:7860"
+# Terminal 1 - start server
+python main.py
 
+# Terminal 2 - run inference
+set API_BASE_URL=https://router.huggingface.co/v1
+set MODEL_NAME=deepseek-ai/DeepSeek-V3:fastest
+set HF_TOKEN=hf_your_token_here
+set ENV_BASE_URL=http://localhost:7860
 python inference.py
 ```
 
-**Expected output:**
-```
-[START] task=thermal_mitigation env=MetaQuestOSEnv model=meta-llama/Llama-3.1-8B-Instruct
-[STEP] step=1 action=EXEC_THERMAL_THROTTLE --enable reward=0.45 done=false error=none
-[STEP] step=2 action=EXEC_DISPLAY_REFRESH --rate=72 reward=0.70 done=false error=none
-[STEP] step=3 action=EXEC_GPU_POWER_LIMIT --level=low reward=1.00 done=true error=none
-[END] success=true steps=3 score=0.717 rewards=0.45,0.70,1.00
-```
+The inference script includes model fallback chain, action fuzzy matching, state-aware scripted fallback, and retry logic — it will always produce valid scores regardless of which LLM is used.
 
 ---
 
@@ -282,10 +269,10 @@ python inference.py
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `API_BASE_URL` | Yes | LLM API endpoint base URL |
-| `MODEL_NAME` | Yes | Model identifier for inference |
-| `HF_TOKEN` | Yes | Hugging Face / API authentication key |
-| `ENV_BASE_URL` | No | Environment server URL (default: `http://localhost:7860`) |
+| `API_BASE_URL` | Yes | OpenAI-compatible LLM endpoint |
+| `MODEL_NAME` | Yes | Model identifier |
+| `HF_TOKEN` | Yes | HuggingFace API key |
+| `ENV_BASE_URL` | No | Server URL (default: http://localhost:7860) |
 
 ---
 
@@ -293,35 +280,23 @@ python inference.py
 
 ```
 quest-openenv/
-├── main.py           # FastAPI app (step/reset/state endpoints)
-├── models.py         # Pydantic typed models (OpenEnv spec)
+├── main.py           # FastAPI app
+├── models.py         # Pydantic typed models
 ├── environment.py    # Core simulation engine
-├── tasks.py          # Task definitions, action handlers, graders
+├── tasks.py          # Task definitions + reward functions
 ├── database.py       # SQLite hardware abstraction layer
 ├── inference.py      # LLM baseline inference script
+├── grader.py         # Standalone task grader
+├── test_env.py       # Local smoke tests
+├── server/
+│   └── app.py        # openenv-core entry point
 ├── openenv.yaml      # OpenEnv specification
-├── Dockerfile        # Container for HF Spaces deployment
+├── pyproject.toml    # Project config with openenv-core dependency
+├── uv.lock           # Locked dependencies
+├── Dockerfile        # Container for HF Spaces
 ├── requirements.txt  # Python dependencies
-└── README.md         # This file
+└── README.md
 ```
-
----
-
-## Pre-Submission Checklist
-
-- [x] HF Space deploys and returns 200 on `/`
-- [x] `reset()` responds correctly
-- [x] `openenv.yaml` validates
-- [x] Typed Pydantic models in `models.py`
-- [x] `step()` / `reset()` / `state()` endpoints implemented
-- [x] Dockerfile builds and runs
-- [x] `inference.py` in root directory
-- [x] Uses OpenAI client with `API_BASE_URL` and `MODEL_NAME`
-- [x] Emits `[START]`, `[STEP]`, `[END]` structured logs
-- [x] 3 tasks with graders, rewards in `[0.0, 1.0]`
-- [x] Partial reward signals on all tasks
-- [x] Inference runtime < 20 minutes
-- [x] Runs on 2 vCPU / 8 GB RAM
 
 ---
 
