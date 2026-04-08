@@ -273,7 +273,7 @@ def get_scripted_action(task_id: str, observation: Dict[str, Any], step: int) ->
         anchors_cleared = anchors.get("cached_anchors_cleared", False)
         session_intact  = anchors.get("session_data_intact", False)
         world_lock      = anchors.get("world_lock_active", True)
-        safe_stage      = observation.get("info", {}).get("safe_mode_stage", 0)
+        safe_stage      = kernel.get("safe_mode_stage", 0)
 
         # Follow exact required order based on current state
         if k_status == "Panic":
